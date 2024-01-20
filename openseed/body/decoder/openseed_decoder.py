@@ -196,7 +196,8 @@ class OpenSeeDDecoder(nn.Module):
             :param refpoint_emb: positional anchor queries in the matching part
             :param batch_size: bs
             """
-        if self.training:
+        # if self.training:
+        if False:
             scalar, noise_scale = self.dn_num, self.noise_scale
 
             known = [(torch.ones_like(t['labels'])).cuda() for t in targets]
@@ -438,7 +439,8 @@ class OpenSeeDDecoder(nn.Module):
 
         tgt_mask = None
         mask_dict = None
-        if self.dn != "no" and self.training:
+        # if self.dn != "no" and self.training:
+        if self.dn != "no" and False:
             assert targets is not None
             input_query_label, input_query_bbox, tgt_mask, mask_dict = \
                 self.prepare_for_dn(targets, None, None, x[0].shape[0])
@@ -447,10 +449,12 @@ class OpenSeeDDecoder(nn.Module):
 
         # direct prediction from the matching and denoising part in the begining
         if self.initial_pred:
-            outputs_class, outputs_mask = self.forward_prediction_heads(tgt.transpose(0, 1), mask_features, self.training and do_seg)
+            self_training = False
+            outputs_class, outputs_mask = self.forward_prediction_heads(tgt.transpose(0, 1), mask_features, self_training and do_seg)
             predictions_class.append(outputs_class)
             predictions_mask.append(outputs_mask)
-        if self.dn != "no" and self.training and mask_dict is not None:
+        self_training = False
+        if self.dn != "no" and self_training and mask_dict is not None:
             refpoint_embed=torch.cat([input_query_bbox,refpoint_embed],dim=1)
 
         hs, references = self.decoder(
@@ -466,7 +470,8 @@ class OpenSeeDDecoder(nn.Module):
         )
 
         for i, output in enumerate(hs):
-            outputs_class, outputs_mask = self.forward_prediction_heads(output.transpose(0, 1), mask_features, (self.training or (i == len(hs)-1)) and do_seg)
+            self_training = False
+            outputs_class, outputs_mask = self.forward_prediction_heads(output.transpose(0, 1), mask_features, (self_training or (i == len(hs)-1)) and do_seg)
             predictions_class.append(outputs_class)
             predictions_mask.append(outputs_mask)
 
@@ -491,7 +496,8 @@ class OpenSeeDDecoder(nn.Module):
 
             if do_seg:
                 predictions_mask = list(predictions_mask)
-        elif self.training:  # this is to insure self.label_enc participate in the model
+        # elif self.training:  # this is to insure self.label_enc participate in the model
+        elif False:
             predictions_class[-1] = predictions_class[-1] + 0.0 * self.lang_mapper[0, 0]
             for i in range(self.mask_embed.num_layers):
                 predictions_class[-1] = predictions_class[-1] + 0.0 * (
@@ -502,10 +508,11 @@ class OpenSeeDDecoder(nn.Module):
         out = {
             'pred_logits': predictions_class[-1],
             'pred_masks': None if not do_seg else predictions_mask[-1],
-            'pred_boxes':out_boxes[-1],
+            'pred_boxes': out_boxes[-1],
             'aux_outputs': self._set_aux_loss(
                 predictions_class if self.mask_classification else None, predictions_mask,out_boxes
-            )
+            ),
+            'mask_features': mask_features,
         }
         if self.two_stage:
             out['interm_outputs'] = interm_outputs

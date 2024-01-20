@@ -273,7 +273,8 @@ class OpenSeeD(nn.Module):
 
     def forward(self, batched_inputs, inference_task='seg'):
         # import ipdb; ipdb.set_trace()
-        if self.training:
+        # if self.training:
+        if False:
             losses = {}
             if self.task_switch['coco']:
                 self.criterion.num_classes = 133 if 'pano' in self.train_dataset_name[0] else 80
@@ -331,7 +332,8 @@ class OpenSeeD(nn.Module):
 
         features = self.backbone(images.tensor)
 
-        if self.training:
+        # if self.training:
+        if False:
             if task == "det" and self.task_switch['o365']:
                 train_class_names = [random.sample(name, 1)[0] for name in self.train_class_names['det']]
             else:
@@ -345,6 +347,7 @@ class OpenSeeD(nn.Module):
             else:
                 targets = None
             outputs, mask_dict = self.sem_seg_head(features, targets=targets, task=task)
+            mask_features = outputs['mask_features']
             # bipartite matching-based loss
             losses = self.criterion(outputs, targets, mask_dict, task=task)
 
@@ -354,11 +357,12 @@ class OpenSeeD(nn.Module):
                 else:
                     # remove this loss if not specified in `weight_dict`
                     losses.pop(k)
-            return losses
+            return losses, mask_features
         else:
             outputs, _ = self.sem_seg_head(features)
             mask_cls_results = outputs["pred_logits"]
             mask_box_results = outputs["pred_boxes"]
+            mask_features = outputs['mask_features']
             if 'seg' in task:
                 if task == 'seg':
                     self.semantic_on = self.panoptic_on = self.sem_seg_postprocess_before_inference = self.instance_on = True
@@ -434,7 +438,7 @@ class OpenSeeD(nn.Module):
                     instance_r = retry_if_cuda_oom(self.instance_inference)(mask_cls_result, mask_pred_result, mask_box_result)
                     processed_results[-1]["instances"] = instance_r
             del mask_pred_results
-            return processed_results
+            return processed_results, mask_features
 
     def prepare_targets(self, targets, images, task='seg'):
         h_pad, w_pad = images.tensor.shape[-2:]
@@ -547,7 +551,8 @@ class OpenSeeD(nn.Module):
         labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(self.num_queries, 1).flatten(0, 1)
         scores_per_image, topk_indices = scores.flatten(0, 1).topk(self.test_topk_per_image, sorted=False)  # select 100
         labels_per_image = labels[topk_indices]
-        topk_indices = topk_indices // self.sem_seg_head.num_classes
+        # topk_indices = topk_indices // self.sem_seg_head.num_classes
+        topk_indices = torch.div(topk_indices, self.sem_seg_head.num_classes, rounding_mode='floor')
         mask_pred = mask_pred[topk_indices]
         # if this is panoptic segmentation, we only keep the "thing" classes
         if self.panoptic_on:
